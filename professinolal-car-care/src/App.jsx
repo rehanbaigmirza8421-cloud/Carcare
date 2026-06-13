@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useMemo, useRef, useState, useDeferredValue, startTransition } from "react";
-
+import { db, collection, addDoc } from "./firebase";
 const STORAGE_KEYS = {
   entered: "carcare-entered",
   vehicles: "carcare-vehicles",
@@ -59,7 +59,7 @@ const serviceOptions = [
 const navigation = [
   { id: "dashboard", label: "Dashboard" },
   { id: "vehicle", label: "Vehicle Desk" },
-  { id: "freeCoating", label: "Free Coating" },
+  { id: "salesCoating", label: "Sales Coating" },
   { id: "quotation", label: "Quotation" },
   { id: "billing", label: "Billing" },
   { id: "settings", label: "Settings" },
@@ -160,6 +160,12 @@ function App() {
   const [quotationCustomer, setQuotationCustomer] = useState(defaultCustomer);
   const [billItems, setBillItems] = useState(() => createLineItems(3));
   const [quotationItems, setQuotationItems] = useState(() => createLineItems(5));
+  const [salesRecords, setSalesRecords] = useState([]);
+  const filteredSalesRecords = salesRecords.filter(
+  (record) =>
+    record.customer?.toLowerCase().includes(search.toLowerCase()) ||
+    record.vehicle?.toLowerCase().includes(search.toLowerCase())
+);
   const [billPreview, setBillPreview] = useState(null);
   const [quotationPreview, setQuotationPreview] = useState(null);
   const billPreviewRef = useRef(null);
@@ -256,7 +262,13 @@ function App() {
   }, [deferredSearch, vehicles]);
 
   const recentBills = useMemo(() => [...bills].slice(-3).reverse(), [bills]);
-  const upcomingCoating = useMemo(() => freeCoating.filter((record) => !record.done).slice(0, 4), [freeCoating]);
+  const upcomingCoating = useMemo(
+  () =>
+    salesRecords
+      .filter((record) => !record.freeCoatingDone)
+      .slice(0, 4),
+  [salesRecords]
+);
 
   function handleVehicleChange(event) {
     const { name, value } = event.target;
@@ -311,12 +323,8 @@ function App() {
       createdAt: new Date().toISOString(),
     };
 
-    try {
-      const createdRecord = await writeRemoteRecord("/api/free-coating", record);
-      setFreeCoating((current) => [createdRecord, ...current.filter((item) => item.id !== createdRecord.id)]);
-    } catch {
-      setFreeCoating((current) => [record, ...current]);
-    }
+
+    setCoatingForm(defaultCoatingForm);
 
     setCoatingForm(defaultCoatingForm);
   }
@@ -599,10 +607,10 @@ function App() {
                           <article key={record.id} className="list-card">
                             <div>
                               <strong>{record.vehicle}</strong>
-                              <p>{record.name}</p>
+                              <p>{record.customer}</p>
                             </div>
                             <div className="list-meta">
-                              <span>{record.nextVisit || "Date not set"}</span>
+                              <span>{record.date}</span>
                               <b className="badge info">Pending</b>
                             </div>
                           </article>
@@ -749,10 +757,35 @@ function App() {
                     </div>
 
                     <div className="form-grid">
-                      <input name="name" placeholder="Customer name" value={coatingForm.name} onChange={handleCoatingChange} required />
-                      <input name="mobile" placeholder="Mobile number" value={coatingForm.mobile} onChange={handleCoatingChange} required />
-                      <input name="vehicle" placeholder="Vehicle number" value={coatingForm.vehicle} onChange={handleCoatingChange} required />
-                      <input name="model" placeholder="Vehicle model" value={coatingForm.model} onChange={handleCoatingChange} required />
+                      <input
+  type="text"
+  placeholder="Search Vehicle Number"
+  value={search}
+  onChange={(e) => setSearch(e.target.value)}
+/>
+                      <select
+  value={coatingForm.vehicle}
+  onChange={(e) =>
+    setCoatingForm({
+      ...coatingForm,
+      vehicle: e.target.value,
+    })
+  }
+>
+  <option value="">Select Vehicle</option>
+
+  {salesRecords
+  .filter(
+    (record) =>
+      !record.freeCoatingDone &&
+      record.vehicle.toLowerCase().includes(search.toLowerCase())
+  )
+  .map((record, index) => (
+      <option key={index} value={record.vehicle}>
+        {record.vehicle} - {record.customer}
+      </option>
+    ))}
+</select>
                       <input name="nextVisit" type="date" value={coatingForm.nextVisit} onChange={handleCoatingChange} />
                       <label className="check-card">
                         <input name="done" type="checkbox" checked={coatingForm.done} onChange={handleCoatingChange} />
@@ -761,7 +794,7 @@ function App() {
                     </div>
 
                     <button className="primary-button" type="submit">
-                      Save Reminder
+                      Mark Free Coating Complete
                     </button>
                   </form>
 
@@ -792,6 +825,122 @@ function App() {
                 </div>
               </section>
             ) : null}
+
+            {activePage === "salesCoating" ? (
+              <section className="page-grid">
+    <div className="panel-card">
+      <h2>Sales Coating Entry</h2>
+<input
+  className="search-input"
+  placeholder="Search Customer or Vehicle Number"
+  value={search}
+  onChange={(e) => setSearch(e.target.value)}
+/>
+      <div className="form-grid">
+        <input id="customerName" placeholder="Customer Name" />
+        <input id="phoneNumber" placeholder="Phone Number" />
+        <input id="vehicleNumber" placeholder="Vehicle Number" />
+        <input id="vehicleModel" placeholder="Vehicle Model" />
+        <input id="chassisNumber" placeholder="Chassis Number" />
+        <input id="vehicleColor" placeholder="Vehicle Color" />
+        <input id="salesmanName" placeholder="Salesman Name" />
+
+        <select id="status">
+          <option>Pending</option>
+          <option>Complete</option>
+        </select>
+
+        <input id="deliveryDate" type="date" />
+      </div>
+<button
+  className="primary-button"
+  onClick={async () => {
+    const saleRecord = {
+      customer: document.getElementById("customerName").value,
+      vehicle: document.getElementById("vehicleNumber").value,
+      model: document.getElementById("vehicleModel").value,
+      color: document.getElementById("vehicleColor").value,
+      salesman: document.getElementById("salesmanName").value,
+      status: document.getElementById("status").value,
+      date: document.getElementById("deliveryDate").value,
+      freeCoatingDone: false,
+      id: crypto.randomUUID(),
+      createdAt: new Date().toISOString(),
+    };
+console.log("Save button clicked", saleRecord);
+
+try {
+  console.log("Before Firestore");
+console.log("Collection Test", collection(db, "sales"));
+  const docRef = await addDoc(
+    collection(db, "sales"),
+    saleRecord
+  );
+console.log("DB:", db);
+console.log("Collection:", collection(db, "sales"));
+  console.log("After Firestore:", docRef.id);
+
+} catch (error) {
+  console.error("Firestore Error:", error);
+  alert(error.message);
+}
+
+
+  setSalesRecords((prev) => {
+  const updated = [saleRecord, ...prev];
+  console.log(updated);
+  return updated;
+});
+  }}
+  
+>
+  Save Record
+</button>
+    </div>
+
+    <div className="stack-list" style={{ marginTop: "20px" }}>
+      <p>Total Records: {salesRecords.length}</p>
+    {filteredSalesRecords.map((record, index) => (
+        <div key={index} className="list-card">
+          <h3>{record.customer}</h3>
+          <p><strong>Vehicle:</strong> {record.vehicle}</p>
+          <p><strong>Model:</strong> {record.model}</p>
+          <p><strong>Color:</strong> {record.color}</p>
+          <p><strong>Salesman:</strong> {record.salesman}</p>
+          <p><strong>Delivery Date:</strong> {record.date}</p>
+          <p>
+            <strong>Warranty:</strong>{" "}
+            {new Date(record.date).getTime() + 365 * 24 * 60 * 60 * 1000 < Date.now()
+              ? "🔴 EXPIRED"
+              : "🟢 ACTIVE"}
+          </p>
+          <p>
+  <strong>Free Coating:</strong>{" "}
+  {record.freeCoatingDone ? "🟢 Complete" : "🟡 Pending"}
+</p>
+          <div className="list-meta">
+            <b className={record.status === "Complete" ? "badge success" : "badge warning"}>
+              {record.status}
+            </b>
+            <button
+  onClick={() => {
+    setSalesRecords((prev) =>
+      prev.map((item, i) =>
+        i === index
+          ? { ...item, freeCoatingDone: true }
+          : item
+      )
+    );
+  }}
+>
+  Free Coating Complete
+</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  </section>
+) : null}
 
             {activePage === "quotation" ? (
               <section className="page-grid">
@@ -1118,3 +1267,4 @@ const DocumentPreview = forwardRef(function DocumentPreview({ preview, settings 
 });
 
 export default App;
+
