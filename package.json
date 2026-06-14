@@ -1,0 +1,12 @@
+{
+  "name": "carcare-workspace",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "start": "npm run dev",
+    "dev": "npm --prefix professinolal-car-care run dev",
+    "build": "npm --prefix professinolal-car-care run build",
+    "preview": "npm --prefix professinolal-car-care run preview",
+    "backend": "npm --prefix car-care-backend start"
+  }
+}

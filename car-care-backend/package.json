@@ -1,22 +1,22 @@
 {
   "name": "car-care-backend",
   "version": "1.0.0",
-  "description": "",
+  "description": "Backend API for the Car Care workshop app",
   "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js"
   },
-  "keywords": [],
+  "keywords": [
+    "express",
+    "workshop",
+    "car-care"
+  ],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "body-parser": "^2.2.2",
     "cors": "^2.8.6",
     "express": "^5.2.1",
-    "mongodb": "^7.3.0",
-    "mongoos": "^0.0.1-security",
     "mongoose": "^9.6.3"
   }
 }
